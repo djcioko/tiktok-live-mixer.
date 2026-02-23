@@ -2,111 +2,141 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Mixer Pro - 5 Layere Telecomandate</title>
+    <title>Mixer Pro - 10 Canale (5 Normal + 5 Green)</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
-        #camera-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
-        .layer { position: absolute; z-index: 2; display: none; }
-        video { width: 100%; height: 100%; }
+        body { margin: 0; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: sans-serif; }
+        #main-container { position: relative; width: 56.25vh; height: 100vh; background: #111; overflow: hidden; }
+        #camera-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         
-        /* Panou Setări */
-        #settings { position: fixed; right: 10px; top: 10px; z-index: 100; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; border: 1px solid #444; }
-        .input-group { margin-bottom: 10px; font-size: 12px; }
-        input[type="file"] { font-size: 10px; }
-        button { cursor: pointer; background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 3px; }
+        /* Canvas pentru Chroma Key */
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+        .layer-vid { display: none; } /* Video-urile sunt ascunse, desenăm pe canvas */
+
+        #settings { position: fixed; right: 10px; top: 10px; z-index: 100; background: rgba(0,0,0,0.9); padding: 10px; border-radius: 8px; font-size: 10px; max-height: 90vh; overflow-y: auto; }
+        .row { border-bottom: 1px solid #333; padding: 5px 0; }
+        input[type="number"] { width: 35px; }
     </style>
 </head>
 <body>
 
-    <video id="camera-bg" autoplay playsinline></video>
-
-    <div id="layer1" class="layer"><video id="v1" playsinline></video></div>
-    <div id="layer2" class="layer"><video id="v2" playsinline></video></div>
-    <div id="layer3" class="layer"><video id="v3" playsinline></video></div>
-    <div id="layer4" class="layer"><video id="v4" playsinline></video></div>
-    <div id="layer5" class="layer"><video id="v5" playsinline></video></div>
+    <div id="main-container">
+        <video id="camera-bg" autoplay playsinline></video>
+        <canvas id="outputCanvas"></canvas>
+        
+        <div id="video-storage">
+            <video id="v1" class="layer-vid" playsinline></video>
+            <video id="v2" class="layer-vid" playsinline></video>
+            <video id="v3" class="layer-vid" playsinline></video>
+            <video id="v4" class="layer-vid" playsinline></video>
+            <video id="v5" class="layer-vid" playsinline></video>
+            <video id="v6" class="layer-vid" playsinline></video>
+            <video id="v7" class="layer-vid" playsinline></video>
+            <video id="v8" class="layer-vid" playsinline></video>
+            <video id="v9" class="layer-vid" playsinline></video>
+            <video id="v10" class="layer-vid" playsinline></video>
+        </div>
+    </div>
 
     <div id="settings">
-        <h4>Configurare Mixer</h4>
-        <div class="input-group">
-            Firebase Key: <input type="text" id="fb_key" style="width:100px"><br>
-            DB URL: <input type="text" id="fb_url" style="width:100px">
-        </div>
-        <hr>
-        <div class="input-group">L1: <input type="file" id="f1" onchange="loadVideo(1)"></div>
-        <div class="input-group">L2: <input type="file" id="f2" onchange="loadVideo(2)"></div>
-        <div class="input-group">L3: <input type="file" id="f3" onchange="loadVideo(3)"></div>
-        <div class="input-group">L4: <input type="file" id="f4" onchange="loadVideo(4)"></div>
-        <div class="input-group">L5: <input type="file" id="f5" onchange="loadVideo(5)"></div>
-        <button onclick="saveSetup()">SALVEAZĂ FIREBASE</button>
-        <p style="font-size:10px">Status: <span id="status">Deconectat</span></p>
+        <strong>MIXER SETTINGS</strong><br>
+        <button onclick="setupFirebase()">Set Firebase</button>
+        <div id="inputs-list"></div>
     </div>
 
     <script>
         let db;
+        let activeVid = null;
+        let isChroma = false;
+        const canvas = document.getElementById('outputCanvas');
+        const ctx = canvas.getContext('2d', {willReadFrequently: true});
 
-        // Pornire Cameră
-        navigator.mediaDevices.getUserMedia({ video: true }).then(s => {
-            document.getElementById('camera-bg').srcObject = s;
-        });
-
-        // Încărcare video local (Metoda sigură)
-        function loadVideo(id) {
-            const file = document.getElementById('f' + id).files[0];
-            if (file) {
-                const url = URL.createObjectURL(file);
-                const v = document.getElementById('v' + id);
-                v.src = url;
-                v.onended = () => { document.getElementById('layer' + id).style.display = 'none'; };
-                console.log("Video " + id + " încărcat.");
-            }
+        // Generăm intrările în setări
+        const list = document.getElementById('inputs-list');
+        for(let i=1; i<=10; i++) {
+            list.innerHTML += `<div class="row">
+                ${i <= 5 ? 'EFECT' : 'GREEN'} ${i}: <input type="file" id="f${i}" onchange="loadVid(${i})"><br>
+                Scale: <input type="number" id="s${i}" value="100">% | Y: <input type="number" id="y${i}" value="0">
+            </div>`;
         }
 
-        function saveSetup() {
-            const key = document.getElementById('fb_key').value;
-            const url = document.getElementById('fb_url').value;
-            localStorage.setItem('fb_key', key);
-            localStorage.setItem('fb_url', url);
-            location.reload();
+        navigator.mediaDevices.getUserMedia({ video: true }).then(s => document.getElementById('camera-bg').srcObject = s);
+
+        function loadVid(id) {
+            const file = document.getElementById('f' + id).files[0];
+            if (file) document.getElementById('v' + id).src = URL.createObjectURL(file);
+        }
+
+        function setupFirebase() {
+            const key = prompt("API Key:");
+            const url = prompt("DB URL:");
+            if(key && url) {
+                localStorage.setItem('fb_key', key);
+                localStorage.setItem('fb_url', url);
+                location.reload();
+            }
         }
 
         // Conectare Firebase
         const k = localStorage.getItem('fb_key');
         const u = localStorage.getItem('fb_url');
         if(k && u) {
-            document.getElementById('fb_key').value = k;
-            document.getElementById('fb_url').value = u;
             firebase.initializeApp({ apiKey: k, databaseURL: u });
             db = firebase.database();
-            document.getElementById('status').innerText = "ONLINE";
-            
-            // Ascultă comenzi de la Redmi 10
-            db.ref('mixer_cmd').on('value', (snap) => {
+            db.ref('mixer_cmd').on('value', snap => {
                 const cmd = snap.val();
-                if(cmd) {
-                    playLayer(cmd.id);
-                }
+                if(cmd) playLayer(cmd.id);
             });
         }
 
         function playLayer(id) {
-            if(id > 5) return; // Momentan avem doar 5 layere
-            const layer = document.getElementById('layer' + id);
-            const video = document.getElementById('v' + id);
+            activeVid = document.getElementById('v' + id);
+            if(!activeVid.src) return;
             
-            // Ascunde restul (opțional, dacă vrei doar unul pe rând)
-            for(let i=1; i<=5; i++) document.getElementById('layer'+i).style.display = 'none';
-
-            layer.style.display = 'block';
-            layer.style.width = "100%"; // Aici putem pune scalarea
-            video.currentTime = 0;
-            video.play().catch(e => console.log("Apasă pe pagină mai întâi!"));
+            isChroma = (id >= 6); // Dacă e butonul 6-10, activăm Chroma Key
+            
+            activeVid.currentTime = 0;
+            activeVid.play();
+            
+            requestAnimationFrame(renderFrame);
         }
 
-        // Click oriunde pentru a permite sunetul
-        document.body.onclick = () => { console.log("Audio activat"); };
+        function renderFrame() {
+            if (!activeVid || activeVid.paused || activeVid.ended) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+
+            const id = activeVid.id.replace('v', '');
+            const scale = document.getElementById('s' + id).value / 100;
+            const yPos = parseInt(document.getElementById('y' + id).value);
+
+            canvas.width = 720; // Rezoluție internă canvas
+            canvas.height = 1280;
+
+            const w = canvas.width * scale;
+            const h = (activeVid.videoHeight / activeVid.videoWidth) * w;
+            const x = (canvas.width - w) / 2;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(activeVid, x, yPos, w, h);
+
+            if (isChroma) {
+                let frame = ctx.getImageData(x, yPos, w, h);
+                let l = frame.data.length / 4;
+                for (let i = 0; i < l; i++) {
+                    let r = frame.data[i * 4 + 0];
+                    let g = frame.data[i * 4 + 1];
+                    let b = frame.data[i * 4 + 2];
+                    if (g > 100 && g > r * 1.2 && g > b * 1.2) {
+                        frame.data[i * 4 + 3] = 0; // Transparent
+                    }
+                }
+                ctx.putImageData(frame, x, yPos);
+            }
+            requestAnimationFrame(renderFrame);
+        }
     </script>
 </body>
 </html>
