@@ -2,29 +2,33 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Mixer Studio V16 - Puls & Remote</title>
+    <title>Mixer Studio V16 - FULL VERTICAL</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
     <style>
         body { background: #000; color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 260px; background: #151515; border-right: 1px solid #333; padding: 10px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; font-size: 11px; }
-        .main-stage { flex-grow: 1; display: flex; justify-content: center; align-items: center; background: #050505; }
-        #canvas-container { height: 95vh; aspect-ratio: 9 / 16; position: relative; background: #111; border: 2px solid #444; }
-        canvas { width: 100%; height: 100%; }
+        .sidebar { width: 260px; background: #151515; border-right: 1px solid #333; padding: 10px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; font-size: 11px; z-index: 10; }
+        .main-stage { flex-grow: 1; display: flex; justify-content: center; align-items: center; background: #050505; position: relative; }
+        
+        /* Containerul 9:16 fixat sa ocupe inaltimea maxima */
+        #canvas-container { height: 98vh; aspect-ratio: 9 / 16; position: relative; background: #111; border: 1px solid #444; overflow: hidden; }
+        canvas { width: 100%; height: 100%; cursor: move; }
+        
         .card { background: #222; padding: 8px; border-radius: 6px; margin-bottom: 5px; border-left: 3px solid #007bff; }
         .fx-card { border-left: 3px solid #ff0050; }
-        button { width: 100%; padding: 6px; margin-top: 4px; cursor: pointer; background: #333; color: white; border: 1px solid #444; border-radius: 4px; font-weight: bold; font-size: 10px; }
-        input[type="file"], select { width: 100%; background: #000; color: white; border: 1px solid #444; font-size: 10px; margin-top: 4px; }
+        button { width: 100%; padding: 7px; margin-top: 4px; cursor: pointer; background: #333; color: white; border: 1px solid #444; border-radius: 4px; font-weight: bold; font-size: 10px; }
+        input[type="file"], select { width: 100%; background: #000; color: white; border: 1px solid #444; font-size: 10px; margin-top: 4px; padding: 3px; }
         .active-ai { background: #2ed573 !important; color: #000; }
         .active-fx { background: #ff0050 !important; color: white; }
-        #status { text-align: center; font-weight: bold; padding: 5px; margin-bottom: 5px; border-radius: 4px; font-size: 10px; }
+        #status { text-align: center; font-weight: bold; padding: 5px; margin-bottom: 5px; border-radius: 4px; font-size: 10px; border: 1px solid #444; }
+        label { font-size: 9px; color: #888; margin-top: 5px; display: block; }
     </style>
 </head>
 <body>
 
 <div class="sidebar">
-    <div id="status" style="background: #331111; color: #ff4444;">OFFLINE</div>
+    <div id="status" style="background: #221111; color: #ff4444;">OFFLINE</div>
     
     <div class="card">
         <strong>1. CAMERA & AI:</strong>
@@ -35,8 +39,8 @@
     <div class="card fx-card">
         <strong>2. EFECT PULS (ENTER):</strong>
         <button id="toggleFX" onclick="toggleFX()">PULS FX: OFF</button>
-        <label style="font-size:9px; color:#888">Intensitate Puls</label>
-        <input type="range" id="fxPower" min="0" max="150" value="60" style="width:100%">
+        <label>Intensitate Puls / Miscare</label>
+        <input type="range" id="fxPower" min="0" max="150" value="60">
     </div>
 
     <div class="card">
@@ -50,7 +54,7 @@
     </div>
 
     <div class="card">
-        <strong>4. SLOTURI FISIERE:</strong>
+        <strong>4. SLOTURI DOCUMENTE (1-10):</strong>
         <button onclick="setupFirebase()" style="background:#444">⚙️ CONFIG FIREBASE</button>
         <div id="file-slots"></div>
     </div>
@@ -76,13 +80,13 @@
     const renderW = 1080, renderH = 1920;
     let config = JSON.parse(localStorage.getItem('mixer_config_v16')) || {};
 
-    // Sloturi
+    // Creare sloturi fisiere
     const slotsDiv = document.getElementById('file-slots');
     for(let i=1; i<=10; i++) {
-        slotsDiv.innerHTML += `<div style="margin-top:5px;">#${i}: <input type="file" id="f${i}" accept="video/*,image/*"></div>`;
+        slotsDiv.innerHTML += `<div style="margin-top:4px;">#${i}: <input type="file" id="f${i}" accept="video/*,image/*"></div>`;
     }
 
-    // AI Mediapipe
+    // Configurare AI (Mediapipe)
     const selfie = new SelfieSegmentation({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`});
     selfie.setOptions({ modelSelection: 1 });
     selfie.onResults(drawAll);
@@ -111,51 +115,60 @@
     function drawAll(results) {
         canvas.width = renderW; canvas.height = renderH;
         
-        // 1. Background
+        // --- 1. FUNDAL (BACKGROUND) ---
         const bgType = document.getElementById('bgSource').value;
         if(bgType === 'green') { ctx.fillStyle = "#00ff00"; ctx.fillRect(0,0,renderW,renderH); }
         else if(bgType === 'photo' && imgBg.src) { ctx.drawImage(imgBg, 0, 0, renderW, renderH); }
         else { ctx.fillStyle = "#000"; ctx.fillRect(0,0,renderW,renderH); }
 
-        // 2. Camera + Puls FX Logic
-        ctx.save();
-        let camW = renderW;
-        let camH = (video.videoHeight / video.videoWidth) * camW || renderH;
-        let camX = (renderW - camW) / 2;
-        let camY = (renderH - camH) / 2;
-
-        if(fxActive) {
-            const t = Date.now() * 0.005;
-            const pPower = document.getElementById('fxPower').value;
-            const pulse = Math.sin(t * 2) * pPower;
-            camX += Math.cos(t * 1.5) * (pPower/2);
-            camY += Math.sin(t * 1.2) * (pPower/2);
-            camW += pulse; 
-            camH = (video.videoHeight / video.videoWidth) * camW;
-        }
-
-        if (aiActive && results.segmentationMask) {
+        // --- 2. CAMERA (FULL VERTICAL FILL) ---
+        if (video.videoWidth > 0) {
             ctx.save();
-            ctx.drawImage(results.segmentationMask, camX, camY, camW, camH);
-            ctx.globalCompositeOperation = 'source-in';
-            ctx.drawImage(results.image, camX, camY, camW, camH);
-            ctx.restore();
-        } else {
-            ctx.drawImage(video, camX, camY, camW, camH);
-        }
-        ctx.restore();
+            
+            let sourceW = video.videoWidth;
+            let sourceH = video.videoHeight;
+            let targetRatio = renderW / renderH; 
+            let drawSourceW = sourceH * targetRatio;
+            let startX = (sourceW - drawSourceW) / 2;
 
-        // 3. Documente active
+            // Parametrii pentru Puls / Miscare
+            let finalX = 0, finalY = 0, finalW = renderW, finalH = renderH;
+            
+            if(fxActive) {
+                const t = Date.now() * 0.005;
+                const pPower = document.getElementById('fxPower').value;
+                const pulse = Math.sin(t * 2) * pPower;
+                finalX = (Math.cos(t * 1.5) * (pPower/2)) - (pulse/2);
+                finalY = (Math.sin(t * 1.2) * (pPower/2)) - (pulse/2);
+                finalW = renderW + pulse;
+                finalH = renderH + (pulse / targetRatio);
+            }
+
+            if (aiActive && results.segmentationMask) {
+                ctx.save();
+                ctx.drawImage(results.segmentationMask, 0, 0, renderW, renderH);
+                ctx.globalCompositeOperation = 'source-in';
+                ctx.drawImage(results.image, startX, 0, drawSourceW, sourceH, finalX, finalY, finalW, finalH);
+                ctx.restore();
+            } else {
+                ctx.drawImage(video, startX, 0, drawSourceW, sourceH, finalX, finalY, finalW, finalH);
+            }
+            ctx.restore();
+        }
+
+        // --- 3. SLOTURI FISIERE (ELEMENTE ACTIVE) ---
         if (activeEl && lastId) {
             const c = config[lastId] || { posX: 0, posY: 0, scale: 1.0 };
             const elW = activeEl.videoWidth || activeEl.width;
             const elH = activeEl.videoHeight || activeEl.height;
             const drawW = renderW * c.scale;
             const drawH = (elH / elW) * drawW;
+            
             ctx.drawImage(activeEl, (renderW - drawW)/2 + c.posX, (renderH - drawH)/2 + c.posY, drawW, drawH);
         }
     }
 
+    // --- LOGICA MIXER ---
     function processCommand(id) {
         if (activeEl && lastId === id) { stopAll(); return; }
         const f = document.getElementById('f' + id).files[0];
@@ -172,14 +185,14 @@
 
     function stopAll() { activeEl = null; lastId = null; if(db) db.ref('mixer_state').set(null); }
 
-    // Interacțiuni
+    // --- INTERACTIUNI BUTOANE ---
     window.onkeydown = (e) => { if(e.key === 'Enter') toggleFX(); };
     function toggleAI() { aiActive = !aiActive; document.getElementById('toggleAI').innerText = aiActive ? "AI: ON" : "AI: OFF"; document.getElementById('toggleAI').classList.toggle('active-ai', aiActive); }
     function toggleFX() { fxActive = !fxActive; document.getElementById('toggleFX').innerText = fxActive ? "PULS: ON" : "PULS: OFF"; document.getElementById('toggleFX').classList.toggle('active-fx', fxActive); }
     function handleBgChange(val) { if(val === 'photo') document.getElementById('bgInp').click(); }
     function loadBgImage(e) { imgBg.src = URL.createObjectURL(e.target.files[0]); }
 
-    // Mouse
+    // --- CONTROALE MOUSE (DRAG & SCALE) ---
     let isDragging = false;
     canvas.onmousedown = () => isDragging = true;
     window.onmouseup = () => { isDragging = false; localStorage.setItem('mixer_config_v16', JSON.stringify(config)); };
@@ -194,10 +207,11 @@
         if(lastId) {
             e.preventDefault();
             config[lastId].scale -= e.deltaY * 0.001;
-            config[lastId].scale = Math.max(0.1, Math.min(5, config[lastId].scale));
+            config[lastId].scale = Math.max(0.05, Math.min(5, config[lastId].scale));
         }
     };
 
+    // --- FIREBASE SETUP ---
     function setupFirebase() {
         const k = prompt("API Key:"), u = prompt("Database URL:");
         if(k && u) { localStorage.setItem('fb_k', k); localStorage.setItem('fb_u', u); location.reload(); }
@@ -205,7 +219,8 @@
     const k = localStorage.getItem('fb_k'), u = localStorage.getItem('fb_u');
     if(k && u) {
         firebase.initializeApp({apiKey: k, databaseURL: u}); db = firebase.database();
-        document.getElementById('status').innerText = "ONLINE ✅"; document.getElementById('status').style.background = "#113311"; document.getElementById('status').style.color = "#2ed573";
+        const st = document.getElementById('status');
+        st.innerText = "ONLINE ✅"; st.style.background = "#113311"; st.style.color = "#2ed573";
         db.ref('mixer_cmd').on('value', snap => { if(snap.val()) processCommand(snap.val().id); });
     }
     initCamera();
