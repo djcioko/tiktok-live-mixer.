@@ -2,30 +2,29 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Mixer Universal - Video & Foto</title>
+    <title>Mixer Pro - Drag & Scroll</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: sans-serif; }
-        #main-container { position: relative; width: 56.25vh; height: 100vh; background: #111; overflow: hidden; border: 2px solid #333; }
-        #camera-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
-        .hidden-media { display: none; }
-        #settings { position: fixed; right: 10px; top: 10px; z-index: 100; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; font-size: 11px; width: 220px; max-height: 90vh; overflow-y: auto; border: 1px solid #444; }
-        .row { border-bottom: 1px solid #444; padding: 10px 0; }
-        input[type="range"] { width: 100%; cursor: pointer; }
+        #main-container { position: relative; width: 56.25vh; height: 100vh; background: #111; overflow: hidden; cursor: move; }
+        #camera-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; pointer-events: none; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
+        #settings { position: fixed; right: 10px; top: 10px; z-index: 100; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 10px; font-size: 10px; width: 180px; }
+        .row { border-bottom: 1px solid #333; padding: 5px 0; }
+        button { cursor: pointer; width: 100%; padding: 5px; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
-    <div id="main-container">
+    <div id="main-container" id="drop-zone">
         <video id="camera-bg" autoplay playsinline></video>
         <canvas id="outputCanvas"></canvas>
     </div>
 
     <div id="settings">
-        <button onclick="setupFirebase()" style="width:100%; padding:10px; cursor:pointer;">⚙️ CONFIGURARE FIREBASE</button>
-        <div id="status" style="text-align:center; margin:10px 0; font-weight:bold; color:red;">Status: Offline</div>
+        <button onclick="setupFirebase()">⚙️ CONFIG FIREBASE</button>
+        <div id="status" style="text-align:center; color:red;">Offline</div>
         <div id="inputs-list"></div>
     </div>
 
@@ -33,22 +32,18 @@
         let db;
         let activeEl = null;
         let isChroma = false;
-        let animationId = null;
+        let animId = null;
+        
+        // Variabile pentru Poziție și Scalare
+        let posX = 0, posY = 0, scale = 1.0;
+        let isDragging = false;
+
         const canvas = document.getElementById('outputCanvas');
         const ctx = canvas.getContext('2d', {willReadFrequently: true});
 
-        // Generăm interfața pentru 10 sloturi
         const list = document.getElementById('inputs-list');
         for(let i=1; i<=10; i++) {
-            list.innerHTML += `
-            <div class="row">
-                <strong>${i <= 5 ? 'EFECT' : 'GREEN'} ${i}</strong>
-                <input type="file" id="f${i}" accept="video/*,image/*">
-                <label>Mărime:</label>
-                <input type="range" id="s${i}" min="10" max="250" value="100">
-                <label>Sus/Jos:</label>
-                <input type="range" id="y${i}" min="-500" max="1200" value="0">
-            </div>`;
+            list.innerHTML += `<div class="row">${i<=5?'EFECT':'GREEN'} ${i}: <input type="file" id="f${i}" accept="video/*,image/*"></div>`;
         }
 
         navigator.mediaDevices.getUserMedia({ video: true }).then(s => document.getElementById('camera-bg').srcObject = s);
@@ -63,82 +58,74 @@
             }
         }
 
-        const k = localStorage.getItem('fb_key');
-        const u = localStorage.getItem('fb_url');
+        // Conectare Firebase
+        const k = localStorage.getItem('fb_key'), u = localStorage.getItem('fb_url');
         if(k && u) {
             firebase.initializeApp({ apiKey: k, databaseURL: u });
             db = firebase.database();
-            document.getElementById('status').innerText = "Status: ONLINE ✅";
-            document.getElementById('status').style.color = "#0f0";
-            db.ref('mixer_cmd').on('value', snap => {
-                const cmd = snap.val();
-                if(cmd) processCommand(cmd.id);
-            });
+            document.getElementById('status').innerText = "ONLINE ✅"; document.getElementById('status').style.color = "#0f0";
+            db.ref('mixer_cmd').on('value', snap => { if(snap.val()) processCommand(snap.val().id); });
         }
 
         async function processCommand(id) {
             const file = document.getElementById('f' + id).files[0];
             if (!file) return;
-
-            // Resetăm ce rula înainte
-            if(animationId) cancelAnimationFrame(animationId);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+            if(animId) cancelAnimationFrame(animId);
             isChroma = (id >= 6);
             const url = URL.createObjectURL(file);
 
             if (file.type.startsWith('video')) {
-                activeEl = document.createElement('video');
-                activeEl.src = url;
-                activeEl.muted = true;
-                activeEl.play();
-                activeEl.onplay = () => render(id);
+                activeEl = document.createElement('video'); activeEl.src = url; activeEl.muted = true; activeEl.loop = true; activeEl.play();
+                activeEl.onplay = () => render();
             } else {
-                activeEl = new Image();
-                activeEl.src = url;
-                activeEl.onload = () => {
-                    render(id);
-                    // Imaginile dispar după 5 secunde să nu blocheze ecranul
-                    setTimeout(() => { ctx.clearRect(0,0,canvas.width,canvas.height); activeEl = null; }, 5000);
-                };
+                activeEl = new Image(); activeEl.src = url;
+                activeEl.onload = () => render();
             }
         }
 
-        function render(id) {
+        // Control Mouse: Drag & Drop
+        canvas.onmousedown = () => isDragging = true;
+        window.onmouseup = () => isDragging = false;
+        window.onmousemove = (e) => {
+            if(isDragging) {
+                posX += e.movementX * 2; // Înmulțim pentru viteză pe rezoluția canvasului
+                posY += e.movementY * 2;
+                if(!(activeEl instanceof HTMLVideoElement)) render(); 
+            }
+        };
+
+        // Control Mouse: Scalare cu Rotița
+        window.onwheel = (e) => {
+            scale -= e.deltaY * 0.001;
+            if(scale < 0.1) scale = 0.1;
+            if(!(activeEl instanceof HTMLVideoElement)) render();
+        };
+
+        function render() {
             if (!activeEl) return;
-            
-            canvas.width = 720;
-            canvas.height = 1280;
+            canvas.width = 720; canvas.height = 1280;
 
-            const scale = document.getElementById('s' + id).value / 100;
-            const yPos = parseInt(document.getElementById('y' + id).value);
-
-            // Calculăm dimensiunile indiferent dacă e video sau imagine
             const elW = activeEl.videoWidth || activeEl.width;
             const elH = activeEl.videoHeight || activeEl.height;
-            
             const w = canvas.width * scale;
             const h = (elH / elW) * w;
-            const x = (canvas.width - w) / 2;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(activeEl, x, yPos, w, h);
+            ctx.drawImage(activeEl, posX + (canvas.width - w)/2, posY, w, h);
 
             if (isChroma) {
-                let frame = ctx.getImageData(x, yPos, w, h);
+                let frame = ctx.getImageData(posX + (canvas.width - w)/2, posY, w, h);
                 for (let i = 0; i < frame.data.length; i += 4) {
                     let r = frame.data[i], g = frame.data[i+1], b = frame.data[i+2];
                     if (g > 70 && g > r * 1.2 && g > b * 1.2) frame.data[i + 3] = 0;
                 }
-                ctx.putImageData(frame, x, yPos);
+                ctx.putImageData(frame, posX + (canvas.width - w)/2, posY);
             }
 
             if (activeEl instanceof HTMLVideoElement && !activeEl.paused) {
-                animationId = requestAnimationFrame(() => render(id));
+                animId = requestAnimationFrame(render);
             }
         }
-
-        document.body.onclick = () => { console.log("Interacțiune OK"); };
     </script>
 </body>
 </html>
