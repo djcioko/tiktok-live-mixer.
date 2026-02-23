@@ -3,103 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mixer Control - Redmi 10</title>
+    <title>Telecomandă Mixer</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
-        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; touch-action: manipulation; }
-        .status { padding: 10px; margin-bottom: 20px; border-radius: 5px; font-weight: bold; }
-        .online { background: #004d40; color: #1de9b6; }
-        .offline { background: #4a148c; color: #ea80fc; }
-        
-        /* BUTON SETARI - ACUM ESTE MARE SI ALBASTRU */
-        .settings-btn { width: 100%; background: #007bff; color: white; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; margin-bottom: 20px; cursor: pointer; }
-        
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        button.effect { height: 80px; border: none; border-radius: 10px; font-weight: bold; font-size: 18px; cursor: pointer; color: white; transition: 0.2s; }
-        .btn-red { background: #d32f2f; }
-        .btn-red:active { background: #b71c1c; transform: scale(0.95); }
-        .btn-green { background: #388e3c; }
-        .btn-green:active { background: #1b5e20; transform: scale(0.95); }
-        
-        #settings-panel { display: none; background: #222; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #444; }
-        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #555; background: #000; color: #fff; }
-        .save-btn { background: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        body { margin: 0; background: #121212; color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; width: 90%; max-width: 400px; }
+        .btn { border: none; border-radius: 15px; padding: 25px 0; font-size: 24px; font-weight: bold; color: white; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.3); background: #d32f2f; /* Rosu (OFF) */ }
+        .btn.active { background: #388e3c; /* Verde (ON) */ transform: scale(0.95); box-shadow: inset 0 4px 10px rgba(0,0,0,0.5); }
+        .status-bar { margin-bottom: 20px; font-size: 14px; color: #aaa; }
     </style>
 </head>
 <body>
 
-    <div id="status-bar" class="status offline">OFFLINE - CONECTEAZĂ FIREBASE</div>
-
-    <button class="settings-btn" onclick="toggleSettings()">⚙️ SETĂRI FIREBASE (APASĂ AICI)</button>
-
-    <div id="settings-panel">
-        <h3>Configurare Firebase</h3>
-        <input type="text" id="apiKey" placeholder="Firebase API Key (din poza appp.png)">
-        <input type="text" id="dbUrl" placeholder="Database URL (link-ul cu .app)">
-        <br><br>
-        <button class="save-btn" onclick="saveSettings()">SALVEAZĂ ȘI CONECTEAZĂ</button>
-    </div>
+    <div class="status-bar" id="status">Conectare...</div>
 
     <div class="grid">
-        <button class="effect btn-red" onclick="sendCmd(1)">EFECT 1</button>
-        <button class="effect btn-red" onclick="sendCmd(2)">EFECT 2</button>
-        <button class="effect btn-red" onclick="sendCmd(3)">EFECT 3</button>
-        <button class="effect btn-red" onclick="sendCmd(4)">EFECT 4</button>
-        <button class="effect btn-red" onclick="sendCmd(5)">EFECT 5</button>
-        <button class="effect btn-green" onclick="sendCmd(6)">GREEN 1</button>
-        <button class="effect btn-green" onclick="sendCmd(7)">GREEN 2</button>
-        <button class="effect btn-green" onclick="sendCmd(8)">GREEN 3</button>
-        <button class="effect btn-green" onclick="sendCmd(9)">GREEN 4</button>
-        <button class="effect btn-green" onclick="sendCmd(10)">GREEN 5</button>
+        <button class="btn" id="b1" onclick="toggleBtn(1)">1</button>
+        <button class="btn" id="b2" onclick="toggleBtn(2)">2</button>
+        <button class="btn" id="b3" onclick="toggleBtn(3)">3</button>
+        <button class="btn" id="b4" onclick="toggleBtn(4)">4</button>
+        <button class="btn" id="b5" onclick="toggleBtn(5)">5</button>
+        <button class="btn" id="b6" onclick="toggleBtn(6)">6</button>
+        <button class="btn" id="b7" onclick="toggleBtn(7)">7</button>
+        <button class="btn" id="b8" onclick="toggleBtn(8)">8</button>
+        <button class="btn" id="b9" onclick="toggleBtn(9)">9</button>
+        <button class="btn" id="b10" onclick="toggleBtn(10)">10</button>
     </div>
 
     <script>
         let db;
-        
-        function toggleSettings() {
-            const panel = document.getElementById('settings-panel');
-            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
-        }
+        // Pune codurile tale Firebase aici (sau le va lua din memorie daca ai facut setarea)
+        const k = localStorage.getItem('fb_key'), u = localStorage.getItem('fb_url');
 
-        function saveSettings() {
-            const key = document.getElementById('apiKey').value.trim();
-            const url = document.getElementById('dbUrl').value.trim();
-            if(key && url) {
-                localStorage.setItem('fb_key', key);
-                localStorage.setItem('fb_url', url);
-                alert("Setări salvate! Pagina se va reîncărca.");
-                location.reload();
-            } else {
-                alert("Te rog pune ambele coduri!");
-            }
-        }
-
-        const savedKey = localStorage.getItem('fb_key');
-        const savedUrl = localStorage.getItem('fb_url');
-
-        if (savedKey && savedUrl) {
-            document.getElementById('apiKey').value = savedKey;
-            document.getElementById('dbUrl').value = savedUrl;
-            
-            const firebaseConfig = { apiKey: savedKey, databaseURL: savedUrl };
-            firebase.initializeApp(firebaseConfig);
+        if(k && u) {
+            firebase.initializeApp({ apiKey: k, databaseURL: u });
             db = firebase.database();
-            
-            const statusBox = document.getElementById('status-bar');
-            statusBox.innerText = "ONLINE - GATA DE LUCRU";
-            statusBox.className = "status online";
+            document.getElementById('status').innerText = "ONLINE - Gata de Mix";
+
+            // Ascultăm starea butoanelor (dacă laptopul zice că s-a terminat video-ul)
+            db.ref('mixer_state').on('value', (snap) => {
+                const activeId = snap.val();
+                updateUI(activeId);
+            });
+        } else {
+            const key = prompt("Firebase API Key:");
+            const url = prompt("Database URL:");
+            localStorage.setItem('fb_key', key);
+            localStorage.setItem('fb_url', url);
+            location.reload();
         }
 
-        function sendCmd(id) {
-            if (!db) {
-                alert("Mai întâi configurează Firebase din butonul albastru!");
-                return;
+        function toggleBtn(id) {
+            // Trimitem comanda la laptop
+            db.ref('mixer_cmd').set({ id: id, time: Date.now() });
+        }
+
+        function updateUI(activeId) {
+            // Resetăm toate butoanele la roșu
+            document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+            // Dacă avem un buton activ, îl facem verde
+            if(activeId) {
+                document.getElementById('b' + activeId).classList.add('active');
             }
-            db.ref('mixer_cmd').set({
-                id: id,
-                ts: Date.now()
-            });
         }
     </script>
 </body>
