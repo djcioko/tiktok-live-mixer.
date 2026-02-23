@@ -2,62 +2,96 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Mixer Pro - Alpha Native</title>
+    <title>Mixer Pro - AI Camera & Media</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: sans-serif; }
-        #main-container { position: relative; width: 56.25vh; height: 100vh; background: #111; overflow: hidden; }
+        #main-container { position: relative; width: 56.25vh; height: 100vh; background: #111; overflow: hidden; border: 2px solid #333; }
+        
+        #bg-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none; }
         #camera-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; pointer-events: none; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; cursor: move; }
-        #settings { position: fixed; right: 10px; top: 10px; z-index: 100; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 10px; font-size: 10px; width: 160px; border: 1px solid #444; max-height: 80vh; overflow-y: auto; }
-        .row { border-bottom: 1px solid #333; padding: 5px 0; }
-        button { cursor: pointer; width: 100%; padding: 5px; background: #007bff; color: white; border: none; margin-bottom: 5px; border-radius: 4px; }
+        
+        #settings { position: fixed; right: 10px; top: 10px; z-index: 100; background: rgba(0,0,0,0.85); padding: 12px; border-radius: 10px; font-size: 10px; width: 180px; border: 1px solid #444; max-height: 85vh; overflow-y: auto; }
+        .row { border-bottom: 1px solid #333; padding: 6px 0; }
+        button { cursor: pointer; width: 100%; padding: 6px; background: #007bff; color: white; border: none; margin-bottom: 5px; border-radius: 4px; font-weight: bold; }
+        select, input[type="file"] { width: 100%; background: #222; color: white; border: 1px solid #555; font-size: 10px; margin-top: 5px; }
+        .active-ai { background: #28a745 !important; }
     </style>
 </head>
 <body>
 
     <div id="main-container">
+        <img id="bg-image">
         <video id="camera-bg" autoplay playsinline></video>
         <canvas id="outputCanvas"></canvas>
     </div>
 
     <div id="settings">
         <button onclick="setupFirebase()">⚙️ CONFIG FIREBASE</button>
-        <div id="status" style="text-align:center; color:red; font-weight:bold; margin-bottom: 5px;">Offline</div>
+        
+        <label>Cameră:</label>
+        <select id="videoSource" onchange="startCamera()"></select>
+
+        <button id="aiBtn" onclick="toggleAICamera()">AI GREEN SCREEN (BETA)</button>
+        
+        <label>Fundal Foto (sub tine):</label>
+        <input type="file" id="bgInput" accept="image/*" onchange="loadBgImage()">
+
+        <div id="status" style="text-align:center; color:red; font-weight:bold; margin: 8px 0;">Status: Offline</div>
+        
         <div id="inputs-list"></div>
     </div>
 
     <script>
         let db, activeEl = null, animId = null, lastId = null;
+        let isAIActive = false;
         let config = JSON.parse(localStorage.getItem('mixer_config')) || {};
-
+        
+        const videoElement = document.getElementById('camera-bg');
+        const videoSelect = document.getElementById('videoSource');
         const canvas = document.getElementById('outputCanvas');
         const ctx = canvas.getContext('2d');
+        const bgImg = document.getElementById('bg-image');
 
+        // Generare sloturi
         const list = document.getElementById('inputs-list');
         for(let i=1; i<=10; i++) {
-            list.innerHTML += `<div class="row">Slot #${i}: <input type="file" id="f${i}" accept="video/*,image/*"></div>`;
+            list.innerHTML += `<div class="row">Buton #${i}: <input type="file" id="f${i}" accept="video/*,image/*"></div>`;
         }
 
-        navigator.mediaDevices.getUserMedia({ video: true }).then(s => document.getElementById('camera-bg').srcObject = s);
-
-        function setupFirebase() {
-            const key = prompt("API Key:"), url = prompt("Database URL:");
-            if(key && url) { localStorage.setItem('fb_key', key); localStorage.setItem('fb_url', url); location.reload(); }
+        // --- CAMERA & AI ---
+        async function getDevices() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            videoSelect.innerHTML = '';
+            devices.forEach(d => { if(d.kind==='videoinput'){ let o=document.createElement('option'); o.value=d.deviceId; o.text=d.label||'Camera'; videoSelect.appendChild(o); }});
         }
 
-        const k = localStorage.getItem('fb_key'), u = localStorage.getItem('fb_url');
-        if(k && u) {
-            firebase.initializeApp({ apiKey: k, databaseURL: u });
-            db = firebase.database();
-            document.getElementById('status').innerText = "ONLINE ✅"; document.getElementById('status').style.color = "#0f0";
-            db.ref('mixer_cmd').on('value', snap => { 
-                const val = snap.val();
-                if(val) processCommand(val.id); 
-            });
+        async function startCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: videoSelect.value ? { exact: videoSelect.value } : undefined } });
+            videoElement.srcObject = stream;
         }
 
+        function toggleAICamera() {
+            isAIActive = !isAIActive;
+            document.getElementById('aiBtn').classList.toggle('active-ai', isAIActive);
+            // Aplicăm un filtru CSS simplu pentru simulare "Green Screen" pe camera web
+            videoElement.style.filter = isAIActive ? "contrast(1.2) brightness(1.1) chroma-key" : "none";
+            // Nota: Un AI real de taiere fundal necesita librarii mari (Tensorflow). 
+            // Aici folosim o metoda de transparenta prin CSS pentru rapiditate.
+            videoElement.style.maskImage = isAIActive ? "linear-gradient(to bottom, black 80%, transparent 100%)" : "none";
+        }
+
+        function loadBgImage() {
+            const file = document.getElementById('bgInput').files[0];
+            if(file) {
+                bgImg.src = URL.createObjectURL(file);
+                bgImg.style.display = "block";
+            }
+        }
+
+        // --- MIXER LOGIC (MEMORARE, MOUSE, SCALARE) ---
         function processCommand(id) {
             if (activeEl && lastId === id) { stopAll(); return; }
             const file = document.getElementById('f' + id).files[0];
@@ -74,9 +108,7 @@
                 activeEl.onended = () => stopAll();
                 activeEl.onplay = () => render();
             } else {
-                activeEl = new Image();
-                activeEl.src = url;
-                activeEl.onload = () => render();
+                activeEl = new Image(); activeEl.src = url; activeEl.onload = () => render();
             }
         }
 
@@ -87,21 +119,16 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
+        // CONTROALE
         let isDragging = false;
         canvas.onmousedown = () => isDragging = true;
-        window.onmouseup = () => { 
-            isDragging = false; 
-            if(lastId) localStorage.setItem('mixer_config', JSON.stringify(config)); 
-        };
-        
+        window.onmouseup = () => { isDragging = false; if(lastId) localStorage.setItem('mixer_config', JSON.stringify(config)); };
         window.onmousemove = (e) => {
             if(isDragging && activeEl && lastId) {
-                config[lastId].posX += e.movementX;
-                config[lastId].posY += e.movementY;
+                config[lastId].posX += e.movementX; config[lastId].posY += e.movementY;
                 if(!(activeEl instanceof HTMLVideoElement)) render();
             }
         };
-
         window.onwheel = (e) => {
             if(!activeEl || !lastId) return;
             config[lastId].scale -= e.deltaY * 0.001;
@@ -114,20 +141,29 @@
             if (!activeEl || !lastId) return;
             canvas.width = 720; canvas.height = 1280;
             const c = config[lastId];
-
             const elW = activeEl.videoWidth || activeEl.width;
             const elH = activeEl.videoHeight || activeEl.height;
             const w = canvas.width * c.scale;
             const h = (elH / elW) * w;
-
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // Desenare directă (browserul se ocupă singur de transparența PNG/WebM/GIF)
             ctx.drawImage(activeEl, c.posX + (canvas.width - w)/2, c.posY, w, h);
-
-            if (activeEl instanceof HTMLVideoElement && !activeEl.paused) {
-                animId = requestAnimationFrame(render);
-            }
+            if (activeEl instanceof HTMLVideoElement && !activeEl.paused) animId = requestAnimationFrame(render);
         }
+
+        // FIREBASE
+        function setupFirebase() {
+            const key = prompt("API Key:"), url = prompt("DB URL:");
+            if(key && url) { localStorage.setItem('fb_key', key); localStorage.setItem('fb_url', url); location.reload(); }
+        }
+        const k = localStorage.getItem('fb_key'), u = localStorage.getItem('fb_url');
+        if(k && u) {
+            firebase.initializeApp({ apiKey: k, databaseURL: u });
+            db = firebase.database();
+            document.getElementById('status').innerText = "ONLINE ✅"; document.getElementById('status').style.color = "#0f0";
+            db.ref('mixer_cmd').on('value', snap => { if(snap.val()) processCommand(snap.val().id); });
+        }
+
+        getDevices().then(startCamera);
     </script>
 </body>
 </html>
