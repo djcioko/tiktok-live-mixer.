@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CONTROLER LIVE</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #050505; color: white; margin: 0; padding: 15px; user-select: none; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #333; }
+        .status-dot { width: 12px; height: 12px; background: red; border-radius: 50%; display: inline-block; }
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 20px; }
+        button { 
+            height: 90px; border: none; border-radius: 12px; font-size: 16px; font-weight: 800;
+            color: white; cursor: pointer; transition: 0.1s; background: #222; text-transform: uppercase;
+        }
+        button:active { transform: scale(0.92); filter: brightness(1.5); }
+        .fx { background: linear-gradient(135deg, #ff0050, #90002d); } /* TikTok Red */
+        .gs { background: linear-gradient(135deg, #00f2ea, #008f8a); } /* TikTok Cyan */
+        #settings { display: none; background: #1a1a1a; padding: 20px; border-radius: 15px; margin-top: 20px; }
+        input { width: 90%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #000; color: white; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <span><b>LIVE CONTROL</b></span>
+        <div id="status-box"><span id="dot" class="status-dot"></span> <span id="status-text">OFFLINE</span></div>
+    </div>
+
+    <div class="grid">
+        <button class="fx" onclick="trigger(1)">Efect 1</button>
+        <button class="fx" onclick="trigger(2)">Efect 2</button>
+        <button class="fx" onclick
