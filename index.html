@@ -3,33 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CONTROLER LIVE</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <title>Mixer Control - Redmi 10</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #050505; color: white; margin: 0; padding: 15px; user-select: none; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #333; }
-        .status-dot { width: 12px; height: 12px; background: red; border-radius: 50%; display: inline-block; }
-        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 20px; }
-        button { 
-            height: 90px; border: none; border-radius: 12px; font-size: 16px; font-weight: 800;
-            color: white; cursor: pointer; transition: 0.1s; background: #222; text-transform: uppercase;
-        }
-        button:active { transform: scale(0.92); filter: brightness(1.5); }
-        .fx { background: linear-gradient(135deg, #ff0050, #90002d); } /* TikTok Red */
-        .gs { background: linear-gradient(135deg, #00f2ea, #008f8a); } /* TikTok Cyan */
-        #settings { display: none; background: #1a1a1a; padding: 20px; border-radius: 15px; margin-top: 20px; }
-        input { width: 90%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #000; color: white; }
+        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; touch-action: manipulation; }
+        .status { padding: 10px; margin-bottom: 20px; border-radius: 5px; font-weight: bold; }
+        .online { background: #004d40; color: #1de9b6; }
+        .offline { background: #4a148c; color: #ea80fc; }
+        
+        /* BUTON SETARI - ACUM ESTE MARE SI ALBASTRU */
+        .settings-btn { width: 100%; background: #007bff; color: white; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; margin-bottom: 20px; cursor: pointer; }
+        
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        button.effect { height: 80px; border: none; border-radius: 10px; font-weight: bold; font-size: 18px; cursor: pointer; color: white; transition: 0.2s; }
+        .btn-red { background: #d32f2f; }
+        .btn-red:active { background: #b71c1c; transform: scale(0.95); }
+        .btn-green { background: #388e3c; }
+        .btn-green:active { background: #1b5e20; transform: scale(0.95); }
+        
+        #settings-panel { display: none; background: #222; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #444; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #555; background: #000; color: #fff; }
+        .save-btn { background: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <span><b>LIVE CONTROL</b></span>
-        <div id="status-box"><span id="dot" class="status-dot"></span> <span id="status-text">OFFLINE</span></div>
+    <div id="status-bar" class="status offline">OFFLINE - CONECTEAZĂ FIREBASE</div>
+
+    <button class="settings-btn" onclick="toggleSettings()">⚙️ SETĂRI FIREBASE (APASĂ AICI)</button>
+
+    <div id="settings-panel">
+        <h3>Configurare Firebase</h3>
+        <input type="text" id="apiKey" placeholder="Firebase API Key (din poza appp.png)">
+        <input type="text" id="dbUrl" placeholder="Database URL (link-ul cu .app)">
+        <br><br>
+        <button class="save-btn" onclick="saveSettings()">SALVEAZĂ ȘI CONECTEAZĂ</button>
     </div>
 
     <div class="grid">
-        <button class="fx" onclick="trigger(1)">Efect 1</button>
-        <button class="fx" onclick="trigger(2)">Efect 2</button>
-        <button class="fx" onclick
+        <button class="effect btn-red" onclick="sendCmd(1)">EFECT 1</button>
+        <button class="effect btn-red" onclick="sendCmd(2)">EFECT 2</button>
+        <button class="effect btn-red" onclick="sendCmd(3)">EFECT 3</button>
+        <button class="effect btn-red" onclick="sendCmd(4)">EFECT 4</button>
+        <button class="effect btn-red" onclick="sendCmd(5)">EFECT 5</button>
+        <button class="effect btn-green" onclick="sendCmd(6)">GREEN 1</button>
+        <button class="effect btn-green" onclick="sendCmd(7)">GREEN 2</button>
+        <button class="effect btn-green" onclick="sendCmd(8)">GREEN 3</button>
+        <button class="effect btn-green" onclick="sendCmd(9)">GREEN 4</button>
+        <button class="effect btn-green" onclick="sendCmd(10)">GREEN 5</button>
+    </div>
+
+    <script>
+        let db;
+        
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function saveSettings() {
+            const key = document.getElementById('apiKey').value.trim();
+            const url = document.getElementById('dbUrl').value.trim();
+            if(key && url) {
+                localStorage.setItem('fb_key', key);
+                localStorage.setItem('fb_url', url);
+                alert("Setări salvate! Pagina se va reîncărca.");
+                location.reload();
+            } else {
+                alert("Te rog pune ambele coduri!");
+            }
+        }
+
+        const savedKey = localStorage.getItem('fb_key');
+        const savedUrl = localStorage.getItem('fb_url');
+
+        if (savedKey && savedUrl) {
+            document.getElementById('apiKey').value = savedKey;
+            document.getElementById('dbUrl').value = savedUrl;
+            
+            const firebaseConfig = { apiKey: savedKey, databaseURL: savedUrl };
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.database();
+            
+            const statusBox = document.getElementById('status-bar');
+            statusBox.innerText = "ONLINE - GATA DE LUCRU";
+            statusBox.className = "status online";
+        }
+
+        function sendCmd(id) {
+            if (!db) {
+                alert("Mai întâi configurează Firebase din butonul albastru!");
+                return;
+            }
+            db.ref('mixer_cmd').set({
+                id: id,
+                ts: Date.now()
+            });
+        }
+    </script>
+</body>
+</html>
