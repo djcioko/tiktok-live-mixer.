@@ -2,21 +2,19 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Mixer Pro Studio - Puls & Drag</title>
+    <title>Mixer Studio Pro - Fix Background</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: sans-serif; }
         #main-container { position: relative; width: 56.25vh; height: 100vh; background: #111; overflow: hidden; border: 2px solid #333; }
-        
-        #canvas-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-        #canvas-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; cursor: move; }
-        
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #canvas-bg { z-index: 1; } /* Fundal + Camera */
+        #canvas-ui { z-index: 2; cursor: move; } /* Efecte PNG/Video */
         #settings { position: fixed; right: 10px; top: 10px; z-index: 100; background: rgba(0,0,0,0.85); padding: 12px; border-radius: 10px; font-size: 10px; width: 180px; border: 1px solid #444; max-height: 85vh; overflow-y: auto; }
-        .row { border-bottom: 1px solid #333; padding: 6px 0; }
-        button { cursor: pointer; width: 100%; padding: 6px; background: #007bff; color: white; border: none; margin-bottom: 5px; border-radius: 4px; font-weight: bold; }
+        .row { border-bottom: 1px solid #333; padding: 6px 0; margin-bottom: 5px; }
+        button { cursor: pointer; width: 100%; padding: 6px; background: #007bff; color: white; border: none; margin-bottom: 3px; border-radius: 4px; font-weight: bold; font-size: 10px; }
         select, input[type="file"] { width: 100%; background: #222; color: white; border: 1px solid #555; padding: 4px; margin-top: 5px; font-size: 10px; }
-        .active-btn { background: #28a745 !important; }
     </style>
 </head>
 <body>
@@ -29,17 +27,19 @@
     <div id="settings">
         <button onclick="setupFirebase()">⚙️ CONFIG FIREBASE</button>
         
-        <label>Cameră:</label>
-        <select id="videoSource" onchange="startCamera()"></select>
+        <div class="row">
+            <strong>CAMERA:</strong>
+            <select id="videoSource" onchange="startCamera()"></select>
+        </div>
 
         <div class="row">
-            <strong>FUNDAL:</strong>
-            <button onclick="setBG('#00ff00')">VERDE</button>
-            <button onclick="setBG('#000000')">NEGRU</button>
+            <strong>FUNDAL (SUB CAMERĂ):</strong>
+            <button onclick="setBG('color', '#00ff00')">🟢 VERDE CHROMA</button>
+            <button onclick="setBG('color', '#000000')">⚫ NEGRU</button>
             <input type="file" id="bgFile" accept="image/*" onchange="loadCustomBG()">
         </div>
 
-        <div id="status" style="text-align:center; color:red; font-weight:bold; margin: 8px 0;">Offline</div>
+        <div id="status" style="text-align:center; color:red; font-weight:bold; margin: 5px 0;">Offline</div>
         <div id="inputs-list"></div>
     </div>
 
@@ -48,7 +48,11 @@
     <script>
         let db, activeEl = null, animId = null, lastId = null;
         let config = JSON.parse(localStorage.getItem('mixer_config')) || {};
-        let bgType = 'color', bgColor = '#000', bgImg = new Image();
+        
+        // Stări fundal
+        let bgMode = 'color'; 
+        let bgValue = '#000000'; 
+        let bgImg = null;
 
         const vCam = document.getElementById('v-cam');
         const cBg = document.getElementById('canvas-bg');
@@ -56,6 +60,24 @@
         const cUi = document.getElementById('canvas-ui');
         const ctxUi = cUi.getContext('2d');
         const videoSelect = document.getElementById('videoSource');
+
+        // --- GESTIUNE FUNDAL ---
+        function setBG(mode, val) {
+            bgMode = mode;
+            bgValue = val;
+        }
+
+        function loadCustomBG() {
+            const file = document.getElementById('bgFile').files[0];
+            if(file) {
+                const img = new Image();
+                img.src = URL.createObjectURL(file);
+                img.onload = () => {
+                    bgImg = img;
+                    bgMode = 'image';
+                };
+            }
+        }
 
         // --- CAMERA ---
         async function getDevices() {
@@ -65,44 +87,50 @@
         }
 
         async function startCamera() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: videoSelect.value ? { exact: videoSelect.value } : undefined, width: 1280, height: 720 } });
+            if (window.stream) window.stream.getTracks().forEach(t => t.stop());
+            const constraints = { video: { deviceId: videoSelect.value ? { exact: videoSelect.value } : undefined, width: 1280, height: 720 } };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            window.stream = stream;
             vCam.srcObject = stream;
-            drawBase();
         }
 
+        // Loop principal pentru Fundal + Camera
         function drawBase() {
             cBg.width = 720; cBg.height = 1280;
-            ctxBg.clearRect(0,0,cBg.width, cBg.height);
-            
-            // 1. Desenează Fundalul
-            if(bgType === 'color') {
-                ctxBg.fillStyle = bgColor;
-                ctxBg.fillRect(0,0,cBg.width, cBg.height);
-            } else {
+            ctxBg.clearRect(0, 0, cBg.width, cBg.height);
+
+            // 1. Desenează Fundalul (sub tot)
+            if (bgMode === 'color') {
+                ctxBg.fillStyle = bgValue;
+                ctxBg.fillRect(0, 0, cBg.width, cBg.height);
+            } else if (bgMode === 'image' && bgImg) {
                 ctxBg.drawImage(bgImg, 0, 0, cBg.width, cBg.height);
             }
 
-            // 2. Desenează Camera Principala
-            ctxBg.drawImage(vCam, 0, 0, cBg.width, cBg.height);
+            // 2. Desenează Camera (cu Crop 9:16)
+            if (vCam.readyState === vCam.HAVE_ENOUGH_DATA) {
+                let vW = vCam.videoWidth;
+                let vH = vCam.videoHeight;
+                let targetRatio = 720 / 1280;
+                let currentW = vH * targetRatio;
+                let startX = (vW - currentW) / 2;
+                ctxBg.drawImage(vCam, startX, 0, currentW, vH, 0, 0, 720, 1280);
+            }
+
             requestAnimationFrame(drawBase);
         }
 
-        function setBG(color) { bgType = 'color'; bgColor = color; }
-        function loadCustomBG() {
-            const file = document.getElementById('bgFile').files[0];
-            if(file) { bgImg.src = URL.createObjectURL(file); bgImg.onload = () => bgType = 'img'; }
-        }
-
-        // --- MIXER (EFECTE, DRAG, SCALARE) ---
+        // --- MIXER (EFECTE) ---
         const list = document.getElementById('inputs-list');
-        for(let i=1; i<=10; i++) list.innerHTML += `<div class="row">#${i}: <input type="file" id="f${i}" accept="video/*,image/*"></div>`;
+        for(let i=1; i<=10; i++) list.innerHTML += `<div class="row">Slot #${i}: <input type="file" id="f${i}" accept="video/*,image/*"></div>`;
 
         function processCommand(id) {
             if (activeEl && lastId === id) { stopAll(); return; }
             const file = document.getElementById('f' + id).files[0];
             if (!file) return;
-            stopAll(); lastId = id;
-            if(db) db.ref('mixer_state').set(id); // Pentru telecomanda Verde/Rosu
+            stopAll(); 
+            lastId = id;
+            if(db) db.ref('mixer_state').set(id);
             if(!config[id]) config[id] = { posX: 0, posY: 0, scale: 1.0 };
             
             const url = URL.createObjectURL(file);
@@ -133,17 +161,17 @@
 
             ctxUi.clearRect(0, 0, cUi.width, cUi.height);
             ctxUi.drawImage(activeEl, c.posX + (cUi.width - w)/2, c.posY, w, h);
-            
             if (activeEl instanceof HTMLVideoElement && !activeEl.paused) animId = requestAnimationFrame(renderEff);
         }
 
-        // --- CONTROALE MOUSE ---
+        // Controale Mouse
         let isDrag = false;
         cUi.onmousedown = () => isDrag = true;
         window.onmouseup = () => { isDrag = false; if(lastId) localStorage.setItem('mixer_config', JSON.stringify(config)); };
         window.onmousemove = (e) => {
             if(isDrag && activeEl && lastId) {
-                config[lastId].posX += e.movementX; config[lastId].posY += e.movementY;
+                config[lastId].posX += e.movementX * 1.5;
+                config[lastId].posY += e.movementY * 1.5;
                 if(!(activeEl instanceof HTMLVideoElement)) renderEff();
             }
         };
@@ -155,7 +183,7 @@
             localStorage.setItem('mixer_config', JSON.stringify(config));
         };
 
-        // --- FIREBASE ---
+        // Firebase
         function setupFirebase() {
             const key = prompt("API Key:"), url = prompt("DB URL:");
             if(key && url) { localStorage.setItem('fb_key', key); localStorage.setItem('fb_url', url); location.reload(); }
@@ -169,6 +197,7 @@
         }
 
         getDevices().then(startCamera);
+        drawBase(); // Pornim loop-ul de desenare
     </script>
 </body>
 </html>
